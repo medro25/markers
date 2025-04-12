@@ -1,5 +1,4 @@
 import asyncio
-
 import json
 import logging
 import websockets
@@ -17,7 +16,7 @@ class EEGWebSocketServer:
         self.bufsize = bufsize
         self.simulator = LSLDataSimulator()
         self.connector = None
-        self.reference_channels = ["TP9", "TP10"]  # Default mastoid reference electrodes
+        self.reference_channels = []  # Will be set by the frontend (user's selection)
 
     async def websocket_handler(self, websocket):
         logging.info("[WebSocket] New client connected.")
@@ -50,7 +49,7 @@ class EEGWebSocketServer:
             selected_marker_name = selection.get("marker_stream")
 
             # Receive the selected reference channels from the frontend
-            self.reference_channels = selection.get("reference_channels", self.reference_channels)
+            self.reference_channels = selection.get("reference_channels", [])  # Updated to allow dynamic selection
 
             if not selected_data_name:
                 await websocket.send(json.dumps({"error": "No data stream selected."}))
@@ -75,10 +74,19 @@ class EEGWebSocketServer:
             logging.info("WebSocket disconnected.")
         finally:
             if self.connector:
-                self.connector.stream.disconnect()
+                if self.connector.stream:
+                    if self.connector.stream.connected:
+                        logging.info("Disconnecting from EEG stream.")
+                        self.connector.stream.disconnect()
+                    else:
+                        logging.warning("Tried to disconnect, but stream was not connected.")
+                else:
+                    logging.warning("No stream to disconnect.")
+
 
     async def marker_listener(self, websocket, marker_stream_name):
         logging.info(f"Looking for Marker stream '{marker_stream_name}'...")
+
         streams = resolve_byprop('name', marker_stream_name, timeout=5)
         if not streams:
             logging.warning(f"Marker stream '{marker_stream_name}' not found.")
@@ -102,6 +110,7 @@ class EEGWebSocketServer:
             logging.warning("Marker stream stopped.")
 
     def apply_reference_cleaning(self, data, channels):
+        # Use the selected reference channels
         ref_indices = [channels.index(ch) for ch in self.reference_channels if ch in channels]
         if not ref_indices:
             return data  # No reference channels found
@@ -119,8 +128,13 @@ class EEGWebSocketServer:
                 if data is None or timestamps is None or len(data) == 0:
                     continue
 
+                # Apply reference cleaning based on the selected channels
                 cleaned_data = self.apply_reference_cleaning(data, channels)
+                logging.debug(f"Reference channels: {self.reference_channels}")
+                logging.debug(f"Cleaned data sample for channel 0: {cleaned_data[0][:10]}")
 
+
+                # Send cleaned EEG data to frontend
                 await websocket.send(json.dumps({
                     "type": "eeg",
                     "timestamps": timestamps.tolist(),
@@ -133,7 +147,7 @@ class EEGWebSocketServer:
 
     async def start_server(self):
         logging.info(f"Server running at ws://{self.host}:{self.port}")
-        async with websockets.serve(self.websocket_handler, self.host, self.port,ping_interval=None):
+        async with websockets.serve(self.websocket_handler, self.host, self.port, ping_interval=None):
             await asyncio.Future()
 
     def run(self):
