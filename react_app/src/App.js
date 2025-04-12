@@ -15,6 +15,7 @@ const App = () => {
     selected_channels: [],
   });
   const [triggers, setTriggers] = useState([]);
+  const [referenceChannel, setReferenceChannel] = useState(""); // State for reference channel
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -68,6 +69,7 @@ const App = () => {
         marker_stream: marker
       }));
       console.log(`Sent selected data stream: ${data}, marker stream: ${marker}`);
+
     }
   };
 
@@ -88,6 +90,10 @@ const App = () => {
     setSelectedChannels((prev) =>
       prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel]
     );
+  };
+
+  const handleReferenceChannelSelect = (event) => {
+    setReferenceChannel(event.target.value); // Set reference channel
   };
 
   useEffect(() => {
@@ -175,6 +181,17 @@ const App = () => {
         </div>
       )}
 
+      {/* Reference Channel Selection */}
+      <div style={{ marginTop: "10px" }}>
+        <label><strong>Select Reference Channel:</strong></label>
+        <select value={referenceChannel} onChange={handleReferenceChannelSelect} style={{ marginLeft: "10px" }}>
+          <option value="">-- Choose a Reference Channel --</option>
+          {channels.map((channel, index) => (
+            <option key={index} value={channel}>{channel}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Trigger Display */}
       {triggers.length > 0 && (
         <div style={{ marginTop: "20px", maxWidth: "100%", backgroundColor: "#f1f1f1", padding: "10px" }}>
@@ -192,7 +209,7 @@ const App = () => {
       {/* EEG Graphs */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         {selectedChannels.length > 0 && selectedChannels.map((channel) => (
-          <EEGGraph key={channel} eegData={eegData} selectedChannel={channel} triggers={triggers} />
+          <EEGGraph key={channel} eegData={eegData} selectedChannel={channel} triggers={triggers} referenceChannel={referenceChannel} />
         ))}
       </div>
     </div>

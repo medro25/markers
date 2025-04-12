@@ -15,7 +15,7 @@ import annotationPlugin from "chartjs-plugin-annotation";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, annotationPlugin);
 
-const EEGGraph = ({ eegData, selectedChannel, triggers }) => {
+const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => {
   const [chartData, setChartData] = useState(null);
   const [chartOptions, setChartOptions] = useState({});
 
@@ -30,8 +30,25 @@ const EEGGraph = ({ eegData, selectedChannel, triggers }) => {
     }
 
     const timestamps = eegData.timestamps;
-    const dataPoints = eegData.data[channelIndex];
+    let dataPoints = eegData.data[channelIndex];
 
+    // Apply average re-referencing if referenceChannels is not empty
+    if (referenceChannels && referenceChannels.length > 0) {
+      const referenceIndices = referenceChannels
+        .map(ref => eegData.selected_channels.indexOf(ref))
+        .filter(index => index !== -1);
+
+      if (referenceIndices.length > 0) {
+        const referenceData = referenceIndices.map(idx => eegData.data[idx]);
+        const avgReference = dataPoints.map((_, i) => {
+          const sum = referenceData.reduce((acc, arr) => acc + arr[i], 0);
+          return sum / referenceIndices.length;
+        });
+        dataPoints = dataPoints.map((val, i) => val - avgReference[i]);
+      }
+    }
+
+    // Add trigger annotations
     const annotations = {};
     triggers.forEach((t, i) => {
       annotations[`trigger-${i}`] = {
@@ -77,12 +94,11 @@ const EEGGraph = ({ eegData, selectedChannel, triggers }) => {
           title: { display: true, text: "Timestamp" },
         },
         y: {
-          title: { display: true, text: "EEG Signal" },
+          title: { display: true, text: "EEG Signal (µV)" },
         },
       },
     });
-
-  }, [eegData, selectedChannel, triggers]);
+  }, [eegData, selectedChannel, triggers, referenceChannels]);
 
   return (
     <div style={{ marginTop: "20px", width: "100%", maxWidth: "90vw" }}>
