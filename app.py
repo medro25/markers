@@ -3,7 +3,7 @@ import json
 import logging
 import websockets
 import numpy as np
-from pylsl import resolve_streams, resolve_byprop, StreamInlet
+from pylsl import resolve_byprop, StreamInlet
 from data.eeg_data_simulator import LSLDataSimulator
 from data.lsl_stream_connector import LSLStreamConnector
 
@@ -16,84 +16,102 @@ class EEGWebSocketServer:
         self.bufsize = bufsize
         self.simulator = LSLDataSimulator()
         self.connector = None
-        self.reference_channels = []  # Will be set by the frontend (user's selection)
+        self.reference_channels = []
 
     async def websocket_handler(self, websocket):
         logging.info("[WebSocket] New client connected.")
 
         try:
+            # Discover all LSL streams
             all_streams = self.simulator.find_streams()
             if not all_streams:
                 await websocket.send(json.dumps({"error": "No streams available."}))
                 return
 
+            # Split data and marker streams
             marker_streams = []
             data_streams = []
 
             for stream in all_streams:
-                if stream.type().lower() == "markers":
-                    marker_streams.append(stream)
-                else:
-                    data_streams.append(stream)
+                stream_info = {
+                    "name": stream.name(),
+                    "type": stream.type(),
+                    "source_id": stream.source_id()
+                }
 
-            # Send available streams information to frontend
+                if stream.type().lower() == "markers":
+                    marker_streams.append(stream_info)
+                else:
+                    data_streams.append(stream_info)
+
+            # Send to frontend
             await websocket.send(json.dumps({
                 "type": "stream_list",
-                "data_streams": [{"name": s.name(), "type": s.type()} for s in data_streams],
-                "marker_streams": [{"name": s.name(), "type": s.type()} for s in marker_streams]
+                "data_streams": data_streams,
+                "marker_streams": marker_streams
             }))
 
+            # Receive stream selection
             message = await websocket.recv()
             selection = json.loads(message)
-            selected_data_name = selection.get("data_stream")
-            selected_marker_name = selection.get("marker_stream")
 
-            # Receive the selected reference channels from the frontend
-            self.reference_channels = selection.get("reference_channels", [])  # Updated to allow dynamic selection
+            selected_data = selection.get("data_stream")  # dict with name, type, source_id
+            selected_marker = selection.get("marker_stream")
+            self.reference_channels = selection.get("reference_channels", [])
 
-            if not selected_data_name:
-                await websocket.send(json.dumps({"error": "No data stream selected."}))
+            if not selected_data or "source_id" not in selected_data:
+                await websocket.send(json.dumps({"error": "Invalid EEG data stream selection."}))
                 return
 
-            if selected_marker_name:
-                marker_task = asyncio.create_task(
-                    self.marker_listener(websocket, selected_marker_name)
-                )
+            # Start listening to marker stream
+            if selected_marker and "source_id" in selected_marker and selected_marker["source_id"]:
+                    logging.info(f"Marker stream selected: {selected_marker['name']} ({selected_marker['source_id']})")
+                    asyncio.create_task(self.marker_listener(websocket, selected_marker))
+            else:
+                logging.info("No marker stream selected. Skipping marker listener.")
 
+
+            # Connect to EEG stream
             self.connector = LSLStreamConnector(bufsize=self.bufsize)
-            if not self.connector.connect(selected_data_name):
+            if not self.connector.connect_by_source_id(selected_data["source_id"]):
                 await websocket.send(json.dumps({"error": "Failed to connect to EEG stream."}))
                 return
 
-            # Send available channels to the frontend for selection
+            # Send available channels
             await websocket.send(json.dumps({"channels": self.connector.ch_names}))
 
+            # Begin streaming EEG data
             await self.stream_real_time(websocket, self.connector.ch_names)
 
         except websockets.exceptions.ConnectionClosed:
             logging.info("WebSocket disconnected.")
         finally:
-            if self.connector:
-                if self.connector.stream:
-                    if self.connector.stream.connected:
-                        logging.info("Disconnecting from EEG stream.")
-                        self.connector.stream.disconnect()
+            # ✅ Safe disconnect logic
+            stream = self.connector.stream if self.connector else None
+            if stream and hasattr(stream, "connected"):
+                try:
+                    if stream.connected:
+                        stream.disconnect()
+                        logging.info("Disconnected from EEG stream.")
                     else:
                         logging.warning("Tried to disconnect, but stream was not connected.")
-                else:
-                    logging.warning("No stream to disconnect.")
+                except Exception as e:
+                    logging.error(f"Error during stream disconnect: {e}")
+            else:
+                logging.warning("No stream instance to disconnect or invalid state.")
 
+    async def marker_listener(self, websocket, marker_stream_info):
+        name = marker_stream_info["name"]
+        source_id = marker_stream_info["source_id"]
+        logging.info(f"Looking for Marker stream '{name}' (source_id={source_id})...")
 
-    async def marker_listener(self, websocket, marker_stream_name):
-        logging.info(f"Looking for Marker stream '{marker_stream_name}'...")
-
-        streams = resolve_byprop('name', marker_stream_name, timeout=5)
+        streams = resolve_byprop("source_id", source_id, timeout=5)
         if not streams:
-            logging.warning(f"Marker stream '{marker_stream_name}' not found.")
+            logging.warning(f"Marker stream '{name}' not found.")
             return
 
         inlet = StreamInlet(streams[0])
-        logging.info(f"Connected to Marker stream: {marker_stream_name}")
+        logging.info(f"Connected to Marker stream: {name}")
 
         try:
             while True:
@@ -101,7 +119,7 @@ class EEGWebSocketServer:
                 if sample:
                     await websocket.send(json.dumps({
                         "type": "trigger",
-                        "stream_name": marker_stream_name,
+                        "stream_name": name,
                         "trigger": sample[0],
                         "timestamp": timestamp
                     }))
@@ -110,13 +128,11 @@ class EEGWebSocketServer:
             logging.warning("Marker stream stopped.")
 
     def apply_reference_cleaning(self, data, channels):
-        # Use the selected reference channels
         ref_indices = [channels.index(ch) for ch in self.reference_channels if ch in channels]
         if not ref_indices:
-            return data  # No reference channels found
+            return data
         ref_data = np.mean(data[ref_indices, :], axis=0)
-        cleaned_data = data - ref_data
-        return cleaned_data
+        return data - ref_data
 
     async def stream_real_time(self, websocket, channels):
         interval = self.connector.bufsize / self.connector.sfreq if self.connector.sfreq else 0.1
@@ -128,13 +144,10 @@ class EEGWebSocketServer:
                 if data is None or timestamps is None or len(data) == 0:
                     continue
 
-                # Apply reference cleaning based on the selected channels
                 cleaned_data = self.apply_reference_cleaning(data, channels)
                 logging.debug(f"Reference channels: {self.reference_channels}")
-                logging.debug(f"Cleaned data sample for channel 0: {cleaned_data[0][:10]}")
+                logging.debug(f"Cleaned data sample: {cleaned_data[0][:10]}")
 
-
-                # Send cleaned EEG data to frontend
                 await websocket.send(json.dumps({
                     "type": "eeg",
                     "timestamps": timestamps.tolist(),
@@ -148,10 +161,11 @@ class EEGWebSocketServer:
     async def start_server(self):
         logging.info(f"Server running at ws://{self.host}:{self.port}")
         async with websockets.serve(self.websocket_handler, self.host, self.port, ping_interval=None):
-            await asyncio.Future()
+            await asyncio.Future()  # Never ends
 
     def run(self):
         asyncio.run(self.start_server())
+
 
 if __name__ == "__main__":
     EEGWebSocketServer().run()
