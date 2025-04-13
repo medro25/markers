@@ -49,8 +49,8 @@ const MultiChannelGraph = ({ eegData }) => {
   useEffect(() => {
     if (!eegData || !eegData.data.length || !eegData.timestamps.length) return;
 
-    const verticalSpacing = 100;
-    const scaleFactor = 1000000; // 🔥 Massive boost to show EEG shape
+    const verticalSpacing = 500;
+    const scaleFactor = 1_000_000_000;
 
     // Log signal range for debugging
     const flat = eegData.data.flat();

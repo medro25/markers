@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import EEGGraph from "./components/EEGGraph";
 import MultiChannelGraph from "./components/MultiChannelGraph"; // ✅ NEW
 
+
 const App = () => {
   const [socket, setSocket] = useState(null);
   const [dataStreams, setDataStreams] = useState([]);
@@ -254,6 +255,7 @@ const App = () => {
       </div>
 
       {/* Toggle Multi-Channel Button */}
+      {/*
       <div style={{ marginTop: "20px" }}>
         <button
           onClick={() => setShowAllChannels(prev => !prev)}
@@ -269,7 +271,7 @@ const App = () => {
           {showAllChannels ? "Hide All Channels View" : "Show All Channels View"}
         </button>
       </div>
-
+*/}
       {/* Triggers */}
       {triggers.length > 0 && (
         <div style={{ marginTop: "20px", maxWidth: "100%", backgroundColor: "#f1f1f1", padding: "10px" }}>
