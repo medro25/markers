@@ -7,3 +7,4 @@ websockets==11.0.3
 mne
 matplotlib
 numpy
+pylsl
