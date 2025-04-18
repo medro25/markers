@@ -84,36 +84,54 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
       plugins: {
         legend: { display: false },
       },
+      layout: {
+        padding: 0,
+      },
+      elements: {
+        point: {
+          radius: 0
+        }
+      },
       scales: {
-        x: {
-          title: { display: true, text: "Timestamp" },
-        },
-        y: {
-          title: { display: true, text: "EEG Signal (µV)" },
-        },
+        x: { display: false }, // ❌ hide x-axis
+        y: { display: false }, // ❌ hide y-axis
       },
     });
+    
+    
   }, [eegData, selectedChannel, triggers, referenceChannels]);
 
   return (
-    <div style={{ marginTop: "20px", width: "100%", maxWidth: "90vw" }}>
-      <h2>EEG Data for {selectedChannel}</h2>
-      {chartData ? (
-        <div style={{
-          width: "100%",
-          height: "40vh",
-          minHeight: "300px",
-          border: "1px solid #ccc",
-          padding: "10px",
-          marginBottom: "20px"
-        }}>
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      width: "100%",
+      height: "100px", // 👈 Minimized height
+      marginBottom: "0px", // 👈 No space between signals
+      borderBottom: "1px solid #eee" // optional light separator
+    }}>
+      {/* Channel name on the left */}
+      <div style={{
+        width: "80px",
+        textAlign: "right",
+        paddingRight: "10px",
+        fontSize: "0.9em",
+        fontWeight: "bold"
+      }}>
+        {selectedChannel}
+      </div>
+  
+      {/* Signal chart */}
+      <div style={{ flex: 1, height: "100%" }}>
+        {chartData ? (
           <Line data={chartData} options={chartOptions} />
-        </div>
-      ) : (
-        <p>No data available for {selectedChannel}.</p>
-      )}
+        ) : (
+          <p style={{ margin: 0 }}>No data</p>
+        )}
+      </div>
     </div>
   );
+  
 };
 
 export default EEGGraph;

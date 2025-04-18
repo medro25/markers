@@ -1,0 +1,91 @@
+✅ 1. BEFORE: Original EEGGraph Return Code
+📄 Before
+jsx
+Copy
+Edit
+return (
+  <div style={{ marginTop: "20px", width: "100%", maxWidth: "90vw" }}>
+    <h2>EEG Data for {selectedChannel}</h2>
+    {chartData ? (
+      <div style={{
+        width: "100%",
+        height: "40vh",
+        minHeight: "300px",
+        border: "1px solid #ccc",
+        padding: "10px",
+        marginBottom: "20px"
+      }}>
+        <Line data={chartData} options={chartOptions} />
+      </div>
+    ) : (
+      <p>No data available for {selectedChannel}.</p>
+    )}
+  </div>
+);
+❌ Why it doesn’t fit your goal:
+The title is too big (<h2>), and above the chart.
+
+The chart height is too tall (300px+), wasting vertical space.
+
+There's space (marginBottom: 20px) between charts.
+
+Axes still visible unless we manually hide them in options.
+
+✅ 2. AFTER: New EEGGraph Code
+🧩 Replace that return block with:
+jsx
+Copy
+Edit
+return (
+  <div style={{
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    height: "60px", // 👈 Minimized height
+    marginBottom: "0px", // 👈 No space between signals
+    borderBottom: "1px solid #eee" // optional light separator
+  }}>
+    {/* Channel name on the left */}
+    <div style={{
+      width: "80px",
+      textAlign: "right",
+      paddingRight: "10px",
+      fontSize: "0.9em",
+      fontWeight: "bold"
+    }}>
+      {selectedChannel}
+    </div>
+
+    {/* Signal chart */}
+    <div style={{ flex: 1, height: "100%" }}>
+      {chartData ? (
+        <Line data={chartData} options={chartOptions} />
+      ) : (
+        <p style={{ margin: 0 }}>No data</p>
+      )}
+    </div>
+  </div>
+);
+🔍 And update this in chartOptions:
+js
+Copy
+Edit
+setChartOptions({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+  },
+  layout: {
+    padding: 0,
+  },
+  elements: {
+    point: {
+      radius: 0
+    }
+  },
+  scales: {
+    x: { display: false }, // ❌ hide x-axis
+    y: { display: false }, // ❌ hide y-axis
+  },
+});

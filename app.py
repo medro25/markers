@@ -10,7 +10,7 @@ from data.lsl_stream_connector import LSLStreamConnector
 logging.basicConfig(level=logging.DEBUG)
 
 class EEGWebSocketServer:
-    def __init__(self, host="0.0.0.0", port=8765, bufsize=200):
+    def __init__(self, host="0.0.0.0", port=8765, bufsize=20):
         self.host = host
         self.port = port
         self.bufsize = bufsize

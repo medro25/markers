@@ -67,15 +67,16 @@ const App = () => {
   }, []);
 
   const sendStreamSelection = (data, marker, reference) => {
-    if (socket && data && marker) {
+    if (socket && data) {
       socket.send(JSON.stringify({
         data_stream: data,
         marker_stream: marker || null,
-        reference_channels: reference
+        reference_channels: reference || []
       }));
       console.log("📤 Sent stream selection:", { data, marker, reference });
     }
   };
+  
 
   const handleDataStreamSelect = (event) => {
     const selected = JSON.parse(event.target.value);
@@ -191,16 +192,36 @@ const App = () => {
                 zIndex: 1000,
               }}
             >
-              {channels.map((channel, index) => (
-                <label key={index} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedChannels.includes(channel)}
-                    onChange={() => handleChannelToggle(channel)}
-                  />
-                  {channel}
-                </label>
-              ))}
+              {/* "Select All Channels" toggle */}
+<label style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0", fontWeight: "bold" }}>
+  <input
+    type="checkbox"
+    checked={selectedChannels.length === channels.length}
+    onChange={() => {
+      if (selectedChannels.length === channels.length) {
+        setSelectedChannels([]);
+      } else {
+        setSelectedChannels(channels);
+      }
+    }}
+  />
+  Select All Channels
+</label>
+
+<hr style={{ margin: "5px 0" }} />
+
+{/* Individual channel checkboxes */}
+{channels.map((channel, index) => (
+  <label key={index} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0" }}>
+    <input
+      type="checkbox"
+      checked={selectedChannels.includes(channel)}
+      onChange={() => handleChannelToggle(channel)}
+    />
+    {channel}
+  </label>
+))}
+
             </div>
           )}
         </div>
@@ -288,15 +309,25 @@ const App = () => {
 
       {/* EEG Graphs */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-        {selectedChannels.length > 0 && selectedChannels.map((channel) => (
-          <EEGGraph
-            key={channel}
-            eegData={eegData}
-            selectedChannel={channel}
-            triggers={triggers}
-            referenceChannels={referenceChannels}
-          />
-        ))}
+        {selectedChannels.length === channels.length && channels.length > 0 ? (
+  // Use one combined graph if "Select All Channels" is active
+  <MultiChannelGraph
+    eegData={eegData}
+    triggers={triggers}
+    referenceChannels={referenceChannels}
+  />
+) : (
+  selectedChannels.map((channel) => (
+    <EEGGraph
+      key={channel}
+      eegData={eegData}
+      selectedChannel={channel}
+      triggers={triggers}
+      referenceChannels={referenceChannels}
+    />
+  ))
+)}
+
 
         {showAllChannels && (
           <MultiChannelGraph eegData={eegData} />
