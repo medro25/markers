@@ -1,56 +1,91 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
-  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
 } from "chart.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const MultiChannelGraph = ({ eegData, referenceChannels, triggers }) => {
-  if (!eegData.data.length || !eegData.timestamps.length) return <p>No EEG data</p>;
+  const [chartData, setChartData] = useState(null);
+  const [chartOptions, setChartOptions] = useState({});
 
-  const labels = eegData.timestamps;
+  useEffect(() => {
+    if (!eegData.data.length || !eegData.timestamps.length) return;
 
-  const datasets = eegData.selected_channels.map((channel, idx) => {
-    let data = eegData.data[idx].slice();
+    const timestamps = eegData.timestamps;
 
-    // Apply reference
-    if (referenceChannels && referenceChannels.length > 0) {
-      const refIndices = referenceChannels.map(ref => eegData.selected_channels.indexOf(ref)).filter(i => i !== -1);
-      if (refIndices.length > 0) {
-        const refData = refIndices.map(i => eegData.data[i]);
-        const avgRef = data.map((_, j) => refData.reduce((sum, r) => sum + r[j], 0) / refData.length);
-        data = data.map((val, j) => val - avgRef[j]);
+    const datasets = eegData.selected_channels.map((channel, idx) => {
+      let data = eegData.data[idx].slice();
+
+      // Apply reference cleaning
+      if (referenceChannels && referenceChannels.length > 0) {
+        const refIndices = referenceChannels
+          .map(ref => eegData.selected_channels.indexOf(ref))
+          .filter(index => index !== -1);
+
+        if (refIndices.length > 0) {
+          const referenceData = refIndices.map(i => eegData.data[i]);
+          const avgRef = data.map((_, j) =>
+            referenceData.reduce((sum, refArr) => sum + refArr[j], 0) / refIndices.length
+          );
+          data = data.map((val, j) => val - avgRef[j]);
+        }
       }
-    }
 
-    return {
-      label: channel,
-      data,
-      borderColor: `hsl(${(idx * 360) / eegData.selected_channels.length}, 70%, 50%)`,
-      borderWidth: 1,
-      pointRadius: 0,
-      tension: 0.1
-    };
-  });
+      // Trigger dot style (shared logic)
+      const dotStyle = timestamps.map(t =>
+        triggers.some(trigger => Math.abs(trigger.timestamp - t) < 0.001)
+          ? 5 : 0
+      );
+      const dotColor = timestamps.map(t =>
+        triggers.some(trigger => Math.abs(trigger.timestamp - t) < 0.001)
+          ? 'red' : 'transparent'
+      );
+
+      return {
+        label: channel,
+        data,
+        borderColor: "blue",
+        borderWidth: 1.5,
+        tension: 0.1,
+        pointRadius: dotStyle,
+        pointBackgroundColor: dotColor,
+      };
+    });
+
+    setChartData({ labels: timestamps, datasets });
+
+    setChartOptions({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      }
+    });
+  }, [eegData, referenceChannels, triggers]);
 
   return (
-    <div style={{ width: "100%", height: "500px", padding: "10px" }}>
-      <Line
-        data={{ labels, datasets }}
-        options={{
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
-          },
-          scales: {
-            x: { display: false },
-            y: { display: false }
-          }
-        }}
-      />
+    <div style={{
+      width: "100%",
+      padding: "10px",
+      marginTop: "20px",
+      border: "1px solid #ccc"
+    }}>
+      {chartData ? (
+        <Line data={chartData} options={chartOptions} />
+      ) : (
+        <p>No EEG data</p>
+      )}
     </div>
   );
 };

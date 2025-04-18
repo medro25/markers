@@ -309,25 +309,15 @@ const App = () => {
 
       {/* EEG Graphs */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-        {selectedChannels.length === channels.length && channels.length > 0 ? (
-  // Use one combined graph if "Select All Channels" is active
-  <MultiChannelGraph
-    eegData={eegData}
-    triggers={triggers}
-    referenceChannels={referenceChannels}
-  />
-) : (
-  selectedChannels.map((channel) => (
-    <EEGGraph
-      key={channel}
-      eegData={eegData}
-      selectedChannel={channel}
-      triggers={triggers}
-      referenceChannels={referenceChannels}
-    />
-  ))
-)}
-
+        {selectedChannels.length > 0 && selectedChannels.map((channel) => (
+          <EEGGraph
+            key={channel}
+            eegData={eegData}
+            selectedChannel={channel}
+            triggers={triggers}
+            referenceChannels={referenceChannels}
+          />
+        ))}
 
         {showAllChannels && (
           <MultiChannelGraph eegData={eegData} />
