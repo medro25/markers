@@ -1,93 +1,133 @@
-import React, { useEffect, useState } from "react";
-import { Line } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-} from "chart.js";
+import React, { useEffect, useRef, useState } from "react";
+import UplotReact from "uplot-react";
+import "uplot/dist/uPlot.min.css";
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+const MultiChannelGraphUPlot = ({ eegData, referenceChannels = [] }) => {
+  const chartRef = useRef(null);
 
-const MultiChannelGraph = ({ eegData, referenceChannels, triggers }) => {
-  const [chartData, setChartData] = useState(null);
-  const [chartOptions, setChartOptions] = useState({});
+  const [verticalSpacing, setVerticalSpacing] = useState(10);
+  const [signalScale, setSignalScale] = useState(20);
+  const [refreshTime, setRefreshTime] = useState(1000); // New state
 
   useEffect(() => {
-    if (!eegData.data.length || !eegData.timestamps.length) return;
+    if (!eegData || !eegData.data.length || !eegData.timestamps.length) return;
 
     const timestamps = eegData.timestamps;
+    const totalChannels = eegData.selected_channels.length;
 
-    const datasets = eegData.selected_channels.map((channel, idx) => {
-      let data = eegData.data[idx].slice();
+    const referenceIndices = referenceChannels
+      .map(ref => eegData.selected_channels.indexOf(ref))
+      .filter(i => i !== -1);
+    const referenceData = referenceIndices.map(idx => eegData.data[idx]);
 
-      // Apply reference cleaning
-      if (referenceChannels && referenceChannels.length > 0) {
-        const refIndices = referenceChannels
-          .map(ref => eegData.selected_channels.indexOf(ref))
-          .filter(index => index !== -1);
+    const avgReference = eegData.data[0].map((_, i) =>
+      referenceData.length
+        ? referenceData.reduce((sum, arr) => sum + arr[i], 0) / referenceData.length
+        : 0
+    );
 
-        if (refIndices.length > 0) {
-          const referenceData = refIndices.map(i => eegData.data[i]);
-          const avgRef = data.map((_, j) =>
-            referenceData.reduce((sum, refArr) => sum + refArr[j], 0) / refIndices.length
-          );
-          data = data.map((val, j) => val - avgRef[j]);
+    const normalize = (arr) => {
+      const min = Math.min(...arr);
+      const max = Math.max(...arr);
+      const range = max - min || 1;
+      return arr.map(val => ((val - min) / range) * 2 - 1);
+    };
+
+    const signals = eegData.data.map((chData, i) => {
+      const adjusted = chData.map((v, j) => v - avgReference[j]);
+      const normalized = normalize(adjusted);
+      const offset = (totalChannels - i - 1) * verticalSpacing;
+      return normalized.map(v => v * signalScale + offset);
+    });
+
+    const series = [
+      {}, // x-axis (timestamps)
+      ...eegData.selected_channels.map(() => ({
+        stroke: "blue",
+        width: 1,
+      })),
+    ];
+
+    const data = [timestamps, ...signals];
+
+    const opts = {
+      width: window.innerWidth - 100,
+      height: totalChannels * verticalSpacing + 20,
+      scales: {
+        x: { time: false },
+        y: {
+          auto: false,
+          range: () => [0, totalChannels * verticalSpacing + 20],
+        },
+      },
+      series,
+      axes: [
+        {
+          show: true,
+          stroke: "black",
+          grid: { stroke: "black", width: 0.5 },
+          values: () => [] // Hide x-axis labels
+        },
+        {
+          show: true,
+          stroke: "black",
+          grid: { stroke: "black", width: 0.5 },
+          values: () => [] // Hide y-axis labels
+        }
+      ],
+      cursor: {
+        drag: {
+          x: false,
+          y: false,
         }
       }
+      // Removed draw hook to disable channel names
+    };
 
-      // Trigger dot style (shared logic)
-      const dotStyle = timestamps.map(t =>
-        triggers.some(trigger => Math.abs(trigger.timestamp - t) < 0.001)
-          ? 5 : 0
-      );
-      const dotColor = timestamps.map(t =>
-        triggers.some(trigger => Math.abs(trigger.timestamp - t) < 0.001)
-          ? 'red' : 'transparent'
-      );
-
-      return {
-        label: channel,
-        data,
-        borderColor: "blue",
-        borderWidth: 1.5,
-        tension: 0.1,
-        pointRadius: dotStyle,
-        pointBackgroundColor: dotColor,
-      };
-    });
-
-    setChartData({ labels: timestamps, datasets });
-
-    setChartOptions({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { display: false },
-        y: { display: false }
-      }
-    });
-  }, [eegData, referenceChannels, triggers]);
+    chartRef.current = { opts, data };
+  }, [eegData, referenceChannels, verticalSpacing, signalScale, refreshTime]);
 
   return (
-    <div style={{
-      width: "100%",
-      padding: "10px",
-      marginTop: "20px",
-      border: "1px solid #ccc"
-    }}>
-      {chartData ? (
-        <Line data={chartData} options={chartOptions} />
+    <>
+      <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+        <label>
+          Vertical Spacing:{" "}
+          <input
+            type="number"
+            value={verticalSpacing}
+            onChange={(e) => setVerticalSpacing(Number(e.target.value))}
+            style={{ width: "60px" }}
+          />
+        </label>
+        <label>
+          Signal Scale:{" "}
+          <input
+            type="number"
+            value={signalScale}
+            onChange={(e) => setSignalScale(Number(e.target.value))}
+            style={{ width: "60px" }}
+          />
+        </label>
+        <label>
+          Refresh Time (ms):{" "}
+          <input
+            type="number"
+            value={refreshTime}
+            onChange={(e) => setRefreshTime(Number(e.target.value))}
+            style={{ width: "80px" }}
+          />
+        </label>
+      </div>
+      {chartRef.current ? (
+        <UplotReact
+          options={chartRef.current.opts}
+          data={chartRef.current.data}
+        />
       ) : (
-        <p>No EEG data</p>
+        <p>Loading EEG signals...</p>
       )}
-    </div>
+    </>
   );
 };
 
-export default MultiChannelGraph;
+export default MultiChannelGraphUPlot;

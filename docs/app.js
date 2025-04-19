@@ -309,19 +309,15 @@ const App = () => {
 
       {/* EEG Graphs */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-      {selectedChannels.length === channels.length ? (
-  <MultiChannelGraph eegData={eegData} />
-) : (
-  selectedChannels.map((channel) => (
-    <EEGGraph
-      key={channel}
-      eegData={eegData}
-      selectedChannel={channel}
-      triggers={triggers}
-      referenceChannels={referenceChannels}
-    />
-  ))
-)}
+        {selectedChannels.length > 0 && selectedChannels.map((channel) => (
+          <EEGGraph
+            key={channel}
+            eegData={eegData}
+            selectedChannel={channel}
+            triggers={triggers}
+            referenceChannels={referenceChannels}
+          />
+        ))}
 
         {showAllChannels && (
           <MultiChannelGraph eegData={eegData} />

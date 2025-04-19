@@ -21,9 +21,31 @@ ChartJS.register(
   Legend
 );
 
+// Global shared values
+let globalSettings = {
+  scale: 1, // Fixed scale
+  height: "100px",
+  marginBottom: "10px"
+};
+
 const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => {
   const [chartData, setChartData] = useState(null);
   const [chartOptions, setChartOptions] = useState({});
+  const [updateTrigger, setUpdateTrigger] = useState(0); // used to force re-render
+
+  const handleChange = (key, value) => {
+    // Ensure unit is always in pixels
+    const validValue = value.endsWith("px") ? value : `${value}px`;
+    globalSettings[key] = validValue;
+    setUpdateTrigger(prev => prev + 1);
+    window.dispatchEvent(new Event("global-eeg-settings-changed"));
+  };
+
+  useEffect(() => {
+    const listener = () => setUpdateTrigger(prev => prev + 1);
+    window.addEventListener("global-eeg-settings-changed", listener);
+    return () => window.removeEventListener("global-eeg-settings-changed", listener);
+  }, []);
 
   useEffect(() => {
     if (!selectedChannel || !eegData.data.length || !eegData.timestamps.length) return;
@@ -35,9 +57,9 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
     }
 
     const timestamps = eegData.timestamps;
-    let rawDataPoints = eegData.data[channelIndex].slice();
-    let dataPoints = rawDataPoints.slice();
+    let dataPoints = eegData.data[channelIndex].slice();
 
+    // Apply reference subtraction
     if (referenceChannels && referenceChannels.length > 0) {
       const referenceIndices = referenceChannels
         .map(ref => eegData.selected_channels.indexOf(ref))
@@ -54,8 +76,11 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
       }
     }
 
-    // Match trigger timestamps to nearest EEG timestamps (for rendering red dots)
-    const dotStyle = timestamps.map((t, i) => {
+    // Apply fixed scale
+    dataPoints = dataPoints.map(val => val * globalSettings.scale);
+
+    // Match triggers
+    const dotStyle = timestamps.map((t) => {
       const isTrigger = triggers.some(trigger => Math.abs(trigger.timestamp - t) < 0.001);
       return {
         pointRadius: isTrigger ? 5 : 0,
@@ -84,54 +109,71 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
       plugins: {
         legend: { display: false },
       },
-      layout: {
-        padding: 0,
-      },
-      elements: {
-        point: {
-          radius: 0
-        }
-      },
+      layout: { padding: 0 },
+      elements: { point: { radius: 0 } },
       scales: {
-        x: { display: false }, // ❌ hide x-axis
-        y: { display: false }, // ❌ hide y-axis
+        x: { display: false },
+        y: { display: false },
       },
     });
-    
-    
-  }, [eegData, selectedChannel, triggers, referenceChannels]);
+
+  }, [eegData, selectedChannel, triggers, referenceChannels, updateTrigger]);
 
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      width: "100%",
-      height: "100px", // 👈 Minimized height
-      marginBottom: "0px", // 👈 No space between signals
-      borderBottom: "1px solid #eee" // optional light separator
-    }}>
-      {/* Channel name on the left */}
+    <>
+      {/* Global height/margin inputs only shown once */}
+      {selectedChannel === eegData.selected_channels[0] && (
+        <div style={{ display: "flex", gap: "1rem", marginBottom: "10px" }}>
+          <label>
+            Height:{" "}
+            <input
+              type="text"
+              value={globalSettings.height}
+              onChange={(e) => handleChange("height", e.target.value)}
+              style={{ width: "80px" }}
+            />
+          </label>
+          <label>
+            Margin Bottom:{" "}
+            <input
+              type="text"
+              value={globalSettings.marginBottom}
+              onChange={(e) => handleChange("marginBottom", e.target.value)}
+              style={{ width: "80px" }}
+            />
+          </label>
+        </div>
+      )}
+
+      {/* EEG graph */}
       <div style={{
-        width: "80px",
-        textAlign: "right",
-        paddingRight: "10px",
-        fontSize: "0.9em",
-        fontWeight: "bold"
+        display: "flex",
+        alignItems: "center",
+        width: "100%",
+        height: globalSettings.height,
+        marginBottom: globalSettings.marginBottom,
+        borderBottom: "1px solid #eee"
       }}>
-        {selectedChannel}
+        <div style={{
+          width: "80px",
+          textAlign: "right",
+          paddingRight: "10px",
+          fontSize: "0.9em",
+          fontWeight: "bold"
+        }}>
+          {selectedChannel}
+        </div>
+
+        <div style={{ flex: 1, height: "100%" }}>
+          {chartData ? (
+            <Line data={chartData} options={chartOptions} />
+          ) : (
+            <p style={{ margin: 0 }}>No data</p>
+          )}
+        </div>
       </div>
-  
-      {/* Signal chart */}
-      <div style={{ flex: 1, height: "100%" }}>
-        {chartData ? (
-          <Line data={chartData} options={chartOptions} />
-        ) : (
-          <p style={{ margin: 0 }}>No data</p>
-        )}
-      </div>
-    </div>
+    </>
   );
-  
 };
 
 export default EEGGraph;
