@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import EEGGraph from "./components/EEGGraph";
-import MultiChannelGraph from "./components/MultiChannelGraph"; // ✅ NEW
-
+import MultiChannelGraph from "./components/MultiChannelGraph";
 
 const App = () => {
   const [socket, setSocket] = useState(null);
@@ -22,7 +21,6 @@ const App = () => {
   const [referenceDropdownOpen, setReferenceDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const referenceDropdownRef = useRef(null);
-  const [showAllChannels, setShowAllChannels] = useState(false); // ✅ NEW
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8765");
@@ -31,16 +29,23 @@ const App = () => {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log("📩 Received from server:", message);
 
         if (message.type === "stream_list") {
           setDataStreams(message.data_streams || []);
           setMarkerStreams(message.marker_streams || []);
         }
 
-        if (message.channels) setChannels(message.channels);
+        if (message.channels) {
+          setChannels(message.channels);
+        }
 
-        if (message.data && message.timestamps && message.selected_channels) {
+        if (
+          message.type === "eeg" &&
+          message.data &&
+          message.timestamps &&
+          message.selected_channels
+        ) {
+          // ✅ Use raw timestamps (not formatted strings)
           setEegData({
             data: message.data,
             timestamps: message.timestamps,
@@ -49,10 +54,26 @@ const App = () => {
         }
 
         if (message.type === "trigger") {
-          setTriggers((prev) => [
-            ...prev.slice(-19),
-            { trigger: message.trigger, timestamp: message.timestamp },
-          ]);
+          const newTrigger = {
+            trigger: message.trigger,
+            timestamp: message.timestamp,
+          };
+
+          setTriggers((prev) => {
+            const updated = [...prev.slice(-19), newTrigger];
+
+            // ✅ Dispatch globally so uPlot chart can use it
+            window.dispatchEvent(
+              new CustomEvent("update-triggers", { detail: updated })
+            );
+
+            // ✅ Keep existing timestamps as-is (raw)
+            setEegData((prevData) => ({
+              ...prevData,
+            }));
+
+            return updated;
+          });
         }
       } catch (error) {
         console.error("❌ Error parsing WebSocket message:", error);
@@ -66,23 +87,34 @@ const App = () => {
     return () => ws.close();
   }, []);
 
-  const sendStreamSelection = (data, marker, reference) => {
+  const sendStartDataStream = (data, reference) => {
     if (socket && data) {
-      socket.send(JSON.stringify({
-        data_stream: data,
-        marker_stream: marker || null,
-        reference_channels: reference || []
-      }));
-      console.log("📤 Sent stream selection:", { data, marker, reference });
+      socket.send(
+        JSON.stringify({
+          type: "start_data",
+          data_stream: data,
+          reference_channels: reference || [],
+        })
+      );
     }
   };
-  
+
+  const sendStartMarkerStream = (marker) => {
+    if (socket && marker) {
+      socket.send(
+        JSON.stringify({
+          type: "start_marker",
+          marker_stream: marker,
+        })
+      );
+    }
+  };
 
   const handleDataStreamSelect = (event) => {
     const selected = JSON.parse(event.target.value);
     setSelectedDataStream(selected);
     setSelectedChannels([]);
-    sendStreamSelection(selected, selectedMarkerStream, referenceChannels);
+    sendStartDataStream(selected, referenceChannels);
   };
 
   const handleMarkerStreamSelect = (event) => {
@@ -90,32 +122,38 @@ const App = () => {
       ? JSON.parse(event.target.value)
       : null;
     setSelectedMarkerStream(selected);
-    sendStreamSelection(selectedDataStream, selected, referenceChannels);
+    sendStartMarkerStream(selected);
   };
 
   const handleChannelToggle = (channel) => {
     setSelectedChannels((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel]
+      prev.includes(channel)
+        ? prev.filter((c) => c !== channel)
+        : [...prev, channel]
     );
   };
 
   const handleReferenceChannelToggle = (channel) => {
     setReferenceChannels((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel]
+      prev.includes(channel)
+        ? prev.filter((c) => c !== channel)
+        : [...prev, channel]
     );
   };
 
   useEffect(() => {
-    if (selectedDataStream && selectedMarkerStream) {
-      sendStreamSelection(selectedDataStream, selectedMarkerStream, referenceChannels);
+    if (selectedDataStream) {
+      sendStartDataStream(selectedDataStream, referenceChannels);
     }
   }, [referenceChannels]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
-        dropdownRef.current && !dropdownRef.current.contains(event.target) &&
-        referenceDropdownRef.current && !referenceDropdownRef.current.contains(event.target)
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target) &&
+        referenceDropdownRef.current &&
+        !referenceDropdownRef.current.contains(event.target)
       ) {
         setDropdownOpen(false);
         setReferenceDropdownOpen(false);
@@ -129,12 +167,20 @@ const App = () => {
     <div style={{ padding: "20px", maxWidth: "100vw" }}>
       <h1>EEG Visualizer</h1>
 
-      {/* Horizontal Dropdowns */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start", marginBottom: "20px" }}>
-        
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "20px",
+          alignItems: "flex-start",
+          marginBottom: "20px",
+        }}
+      >
         {/* EEG Stream */}
         <div>
-          <label><strong>EEG Data Stream:</strong></label>
+          <label>
+            <strong>EEG Data Stream:</strong>
+          </label>
           <select onChange={handleDataStreamSelect} style={{ marginLeft: "10px" }}>
             <option value="">-- Choose a Data Stream --</option>
             {dataStreams.map((stream, index) => (
@@ -147,7 +193,9 @@ const App = () => {
 
         {/* Marker Stream */}
         <div>
-          <label><strong>Marker Stream:</strong></label>
+          <label>
+            <strong>Marker Stream:</strong>
+          </label>
           <select onChange={handleMarkerStreamSelect} style={{ marginLeft: "10px" }}>
             <option value="">-- Choose a Marker Stream --</option>
             {markerStreams.map((stream, index) => (
@@ -158,22 +206,25 @@ const App = () => {
           </select>
         </div>
 
-        {/* EEG Channels Dropdown */}
+        {/* EEG Channels */}
         <div style={{ position: "relative" }}>
-          <label><strong>Select EEG Channels:</strong></label>
+          <label>
+            <strong>Select EEG Channels:</strong>
+          </label>
           <div
             style={{
               marginLeft: "10px",
               border: "1px solid #ccc",
               padding: "10px",
               cursor: "pointer",
-              display: "inline-block",
               backgroundColor: "#f9f9f9",
-              userSelect: "none"
             }}
             onClick={() => setDropdownOpen(!dropdownOpen)}
           >
-            {selectedChannels.length > 0 ? selectedChannels.join(", ") : "Select Channels"} ▼
+            {selectedChannels.length > 0
+              ? selectedChannels.join(", ")
+              : "Select Channels"}{" "}
+            ▼
           </div>
 
           {dropdownOpen && (
@@ -192,56 +243,54 @@ const App = () => {
                 zIndex: 1000,
               }}
             >
-              {/* "Select All Channels" toggle */}
-<label style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0", fontWeight: "bold" }}>
-  <input
-    type="checkbox"
-    checked={selectedChannels.length === channels.length}
-    onChange={() => {
-      if (selectedChannels.length === channels.length) {
-        setSelectedChannels([]);
-      } else {
-        setSelectedChannels(channels);
-      }
-    }}
-  />
-  Select All Channels
-</label>
-
-<hr style={{ margin: "5px 0" }} />
-
-{/* Individual channel checkboxes */}
-{channels.map((channel, index) => (
-  <label key={index} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0" }}>
-    <input
-      type="checkbox"
-      checked={selectedChannels.includes(channel)}
-      onChange={() => handleChannelToggle(channel)}
-    />
-    {channel}
-  </label>
-))}
-
+              <label style={{ fontWeight: "bold" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedChannels.length === channels.length}
+                  onChange={() =>
+                    setSelectedChannels(
+                      selectedChannels.length === channels.length
+                        ? []
+                        : channels
+                    )
+                  }
+                />
+                Select All Channels
+              </label>
+              <hr />
+              {channels.map((channel, index) => (
+                <label key={index} style={{ display: "block" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedChannels.includes(channel)}
+                    onChange={() => handleChannelToggle(channel)}
+                  />
+                  {channel}
+                </label>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Reference Channels Dropdown */}
+        {/* Reference Channels */}
         <div style={{ position: "relative" }}>
-          <label><strong>Select Reference Channels:</strong></label>
+          <label>
+            <strong>Select Reference Channels:</strong>
+          </label>
           <div
             style={{
               marginLeft: "10px",
               border: "1px solid #ccc",
               padding: "10px",
               cursor: "pointer",
-              display: "inline-block",
               backgroundColor: "#f9f9f9",
-              userSelect: "none"
             }}
             onClick={() => setReferenceDropdownOpen(!referenceDropdownOpen)}
           >
-            {referenceChannels.length > 0 ? referenceChannels.join(", ") : "Select Reference Channels"} ▼
+            {referenceChannels.length > 0
+              ? referenceChannels.join(", ")
+              : "Select Reference Channels"}{" "}
+            ▼
           </div>
 
           {referenceDropdownOpen && (
@@ -261,7 +310,7 @@ const App = () => {
               }}
             >
               {channels.map((channel, index) => (
-                <label key={index} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 0" }}>
+                <label key={index} style={{ display: "block" }}>
                   <input
                     type="checkbox"
                     checked={referenceChannels.includes(channel)}
@@ -275,29 +324,24 @@ const App = () => {
         </div>
       </div>
 
-      {/* Toggle Multi-Channel Button */}
-      {/*
-      <div style={{ marginTop: "20px" }}>
-        <button
-          onClick={() => setShowAllChannels(prev => !prev)}
+      {/* Trigger Display */}
+      {triggers.length > 0 && (
+        <div
           style={{
-            padding: "10px 15px",
-            backgroundColor: showAllChannels ? "#ddd" : "#4CAF50",
-            color: showAllChannels ? "#000" : "#fff",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer"
+            marginTop: "20px",
+            backgroundColor: "#f1f1f1",
+            padding: "10px",
           }}
         >
-          {showAllChannels ? "Hide All Channels View" : "Show All Channels View"}
-        </button>
-      </div>
-*/}
-      {/* Triggers */}
-      {triggers.length > 0 && (
-        <div style={{ marginTop: "20px", maxWidth: "100%", backgroundColor: "#f1f1f1", padding: "10px" }}>
           <h3>Recent UE5 Triggers</h3>
-          <ul style={{ maxHeight: "100px", overflowY: "auto", listStyle: "none", padding: 0 }}>
+          <ul
+            style={{
+              maxHeight: "100px",
+              overflowY: "auto",
+              listStyle: "none",
+              padding: 0,
+            }}
+          >
             {triggers.map((t, i) => (
               <li key={i}>
                 <strong>{Number(t.timestamp).toFixed(3)}:</strong> {t.trigger}
@@ -307,24 +351,32 @@ const App = () => {
         </div>
       )}
 
-      {/* EEG Graphs */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-      {selectedChannels.length === channels.length ? (
-  <MultiChannelGraph eegData={eegData} />
-) : (
-  selectedChannels.map((channel) => (
-    <EEGGraph
-      key={channel}
-      eegData={eegData}
-      selectedChannel={channel}
-      triggers={triggers}
-      referenceChannels={referenceChannels}
-    />
-  ))
-)}
-
-        {showAllChannels && (
-          <MultiChannelGraph eegData={eegData} />
+      {/* EEG Visuals */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          width: "100%",
+        }}
+      >
+        {selectedChannels.length === channels.length ? (
+          <MultiChannelGraph
+            eegData={eegData}
+            referenceChannels={referenceChannels}
+            selectedChannels={selectedChannels}
+            channels={channels}
+          />
+        ) : (
+          selectedChannels.map((channel) => (
+            <EEGGraph
+              key={channel}
+              eegData={eegData}
+              selectedChannel={channel}
+              triggers={triggers}
+              referenceChannels={referenceChannels}
+            />
+          ))
         )}
       </div>
     </div>
