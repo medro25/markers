@@ -296,7 +296,7 @@ const App = () => {
       {/* Triggers */}
       {triggers.length > 0 && (
         <div style={{ marginTop: "20px", maxWidth: "100%", backgroundColor: "#f1f1f1", padding: "10px" }}>
-          <h3>Recent UE5 Triggers</h3>
+          <h3>Recent Triggers</h3>
           <ul style={{ maxHeight: "100px", overflowY: "auto", listStyle: "none", padding: 0 }}>
             {triggers.map((t, i) => (
               <li key={i}>

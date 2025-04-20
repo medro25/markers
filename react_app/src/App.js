@@ -212,20 +212,20 @@ const App = () => {
             <strong>Select EEG Channels:</strong>
           </label>
           <div
-            style={{
-              marginLeft: "10px",
-              border: "1px solid #ccc",
-              padding: "10px",
-              cursor: "pointer",
-              backgroundColor: "#f9f9f9",
-            }}
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-          >
-            {selectedChannels.length > 0
-              ? selectedChannels.join(", ")
-              : "Select Channels"}{" "}
-            ▼
-          </div>
+  style={{
+    marginLeft: "10px",
+    border: "1px solid #ccc",
+    padding: "10px",
+    cursor: "pointer",
+    backgroundColor: "#f9f9f9",
+  }}
+  onClick={() => setDropdownOpen(!dropdownOpen)}
+>
+{selectedChannels.length > 0
+  ? `${selectedChannels.length} channel${selectedChannels.length > 1 ? 's' : ''} selected`
+  : "Select Channels"}{" "}
+  ▼
+</div>
 
           {dropdownOpen && (
             <div
@@ -333,7 +333,7 @@ const App = () => {
             padding: "10px",
           }}
         >
-          <h3>Recent UE5 Triggers</h3>
+          <h3>Recent Triggers</h3>
           <ul
             style={{
               maxHeight: "100px",

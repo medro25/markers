@@ -6,7 +6,7 @@ const MultiChannelGraphUPlot = ({
   eegData,
   referenceChannels = [],
   selectedChannels = [],
-  channels = []
+  channels = [],
 }) => {
   const chartRef = useRef(null);
   const [verticalSpacing, setVerticalSpacing] = useState(10);
@@ -16,10 +16,9 @@ const MultiChannelGraphUPlot = ({
   const lastUpdateRef = useRef(Date.now());
   const [triggers, setTriggers] = useState([]);
 
-  // 🔔 Listen for global trigger updates
   useEffect(() => {
     const handler = (event) => {
-      console.log("📡 Triggers received:", event.detail);
+      console.log("[Event] Trigger update received");
       setTriggers(event.detail || []);
     };
     window.addEventListener("update-triggers", handler);
@@ -31,24 +30,85 @@ const MultiChannelGraphUPlot = ({
   };
 
   const handleToggleRefresh = () => {
-    setUseRefresh(prev => !prev);
+    setUseRefresh((prev) => !prev);
+  };
+
+  const annotationPlugin = {
+    hooks: {
+      draw: (u) => {
+        const ctx = u.ctx;
+        const chartLeft = u.bbox.left;
+        const chartRight = u.bbox.left + u.bbox.width;
+
+        const eegStart = eegData.timestamps?.[0] ?? 0;
+        const eegEnd = eegData.timestamps?.[eegData.timestamps.length - 1] ?? eegStart;
+
+        triggers.forEach(({ timestamp }) => {
+          let xValue;
+
+          if (timestamp >= eegStart && timestamp <= eegEnd) {
+            xValue = timestamp;
+          } else {
+            xValue = timestamp - eegStart;
+          }
+
+          const xPos = u.valToPos(xValue, "x", true);
+          const yPos = u.bbox.top + u.bbox.height - 10;
+
+          console.log(`[Trigger Marker] Raw: ${timestamp}, Adjusted: ${xValue}, xPos: ${xPos}`);
+
+          if (xPos >= chartLeft && xPos <= chartRight) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 1.5;
+
+            ctx.moveTo(xPos - 5, yPos);
+            ctx.lineTo(xPos + 5, yPos);
+            ctx.moveTo(xPos, yPos - 5);
+            ctx.lineTo(xPos, yPos + 5);
+
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            console.log(`[Trigger Marker] Skipped (out of bounds): ${timestamp} at xPos ${xPos}`);
+          }
+        });
+      },
+    },
   };
 
   useEffect(() => {
-    if (!eegData || !eegData.data.length || !eegData.timestamps.length) return;
+    console.log("[useEffect] Chart update triggered");
+
+    if (!eegData?.data?.length || !eegData.timestamps?.length) {
+      console.log("[Skip] No EEG data or timestamps available");
+      return;
+    }
 
     const now = Date.now();
     const elapsed = now - lastUpdateRef.current;
-    if (useRefresh && elapsed < refreshTime) return;
+
+    if (useRefresh && elapsed < refreshTime) {
+      console.log(`[Skip Update] elapsed=${elapsed}ms < refreshTime=${refreshTime}ms`);
+      return;
+    }
+
+    if (useRefresh) {
+      console.log(`[Update] Refresh time passed (${elapsed}ms >= ${refreshTime}ms), updating chart`);
+    } else {
+      console.log("[Update] Refresh disabled, updating chart immediately");
+    }
+
     lastUpdateRef.current = now;
 
     const timestamps = eegData.timestamps;
     const totalChannels = eegData.selected_channels.length;
 
     const referenceIndices = referenceChannels
-      .map(ref => eegData.selected_channels.indexOf(ref))
-      .filter(i => i !== -1);
-    const referenceData = referenceIndices.map(idx => eegData.data[idx]);
+      .map((ref) => eegData.selected_channels.indexOf(ref))
+      .filter((i) => i !== -1);
+    const referenceData = referenceIndices.map((idx) => eegData.data[idx]);
 
     const avgReference = eegData.data[0].map((_, i) =>
       referenceData.length
@@ -60,14 +120,14 @@ const MultiChannelGraphUPlot = ({
       const min = Math.min(...arr);
       const max = Math.max(...arr);
       const range = max - min || 1;
-      return arr.map(val => ((val - min) / range) * 2 - 1);
+      return arr.map((val) => ((val - min) / range) * 2 - 1);
     };
 
     const signals = eegData.data.map((chData, i) => {
       const adjusted = chData.map((v, j) => v - avgReference[j]);
       const normalized = normalize(adjusted);
       const offset = (totalChannels - i - 1) * verticalSpacing;
-      return normalized.map(v => v * signalScale + offset);
+      return normalized.map((v) => v * signalScale + offset);
     });
 
     const series = [
@@ -80,50 +140,9 @@ const MultiChannelGraphUPlot = ({
 
     const data = [timestamps, ...signals];
 
-    // 🎯 Handle triggers as red dots
-    if (selectedChannels.length === channels.length && triggers.length > 0) {
-      const triggerYs = [];
-      const triggerXs = [];
-
-      triggers.forEach(trigger => {
-        const ts = parseFloat(trigger.timestamp);
-        const idx = timestamps.findIndex(t => Math.abs(Number(t) - ts) < 0.01); // more wiggle room
-
-        if (idx !== -1) {
-          triggerXs.push(timestamps[idx]);
-          triggerYs.push(5); // Y value (bottom of graph)
-          console.log(`[✅ Trigger Match] '${trigger.trigger}' at ${timestamps[idx]}`);
-        } else {
-          const closest = timestamps.reduce((prev, curr) =>
-            Math.abs(curr - ts) < Math.abs(prev - ts) ? curr : prev
-          );
-          console.warn(`[⚠️ Trigger Skipped] No match for ${ts} | Closest was ${closest}`);
-        }
-      });
-
-      if (triggerYs.length > 0) {
-        data[0].push(...triggerXs); // Add trigger X values to timestamps
-        data.push(triggerYs); // Add Y values for red dots
-
-        series.push({
-          label: "Triggers",
-          points: {
-            show: true,
-            size: 6,
-            stroke: "red",
-            fill: "red",
-          },
-          width: 0,
-          show: true,
-        });
-
-        console.log(`[🎯 Trigger Marker] Marked ${triggerYs.length} red dots on graph`);
-      }
-    }
-
     const opts = {
       width: window.innerWidth - 100,
-      height: totalChannels * verticalSpacing + 20,
+      height: totalChannels * verticalSpacing + 40,
       scales: {
         x: { time: false },
         y: {
@@ -134,33 +153,46 @@ const MultiChannelGraphUPlot = ({
       series,
       axes: [
         {
-          show: true,
+          show: false,
           stroke: "black",
           grid: { stroke: "black", width: 0.5 },
-          values: () => [],
         },
         {
           show: true,
           stroke: "black",
           grid: { stroke: "black", width: 0.5 },
-          values: () => [],
         },
       ],
       cursor: {
-        drag: {
-          x: false,
-          y: false,
-        },
+        drag: { x: false, y: false },
       },
+      plugins: [annotationPlugin],
     };
 
     chartRef.current = { opts, data };
-  }, [eegData, referenceChannels, verticalSpacing, signalScale, refreshTime, useRefresh, selectedChannels, channels.length, triggers]);
+  }, [
+    eegData,
+    referenceChannels,
+    verticalSpacing,
+    signalScale,
+    refreshTime,
+    useRefresh,
+    selectedChannels,
+    channels.length,
+    triggers,
+  ]);
 
   return (
     <>
       {selectedChannels.length === channels.length && (
-        <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "1rem",
+            marginBottom: "1rem",
+            alignItems: "center",
+          }}
+        >
           <label>
             Vertical Spacing:{" "}
             <input
@@ -201,7 +233,10 @@ const MultiChannelGraphUPlot = ({
       )}
 
       {chartRef.current ? (
-        <UplotReact options={chartRef.current.opts} data={chartRef.current.data} />
+        <UplotReact
+          options={chartRef.current.opts}
+          data={chartRef.current.data}
+        />
       ) : (
         <p>Loading EEG signals...</p>
       )}
