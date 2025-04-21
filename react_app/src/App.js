@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import EEGGraph from "./components/EEGGraph";
 import MultiChannelGraph from "./components/MultiChannelGraph";
+import SpectralAnalysis from "./components/SpectralAnalysis";
 
 const App = () => {
   const [socket, setSocket] = useState(null);
@@ -11,6 +12,8 @@ const App = () => {
   const [channels, setChannels] = useState([]);
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [referenceChannels, setReferenceChannels] = useState([]);
+  const [showSpectralAnalysis, setShowSpectralAnalysis] = useState(false);
+
   const [eegData, setEegData] = useState({
     data: [],
     timestamps: [],
@@ -45,7 +48,6 @@ const App = () => {
           message.timestamps &&
           message.selected_channels
         ) {
-          // ✅ Use raw timestamps (not formatted strings)
           setEegData({
             data: message.data,
             timestamps: message.timestamps,
@@ -61,17 +63,12 @@ const App = () => {
 
           setTriggers((prev) => {
             const updated = [...prev.slice(-19), newTrigger];
-
-            // ✅ Dispatch globally so uPlot chart can use it
             window.dispatchEvent(
               new CustomEvent("update-triggers", { detail: updated })
             );
-
-            // ✅ Keep existing timestamps as-is (raw)
             setEegData((prevData) => ({
               ...prevData,
             }));
-
             return updated;
           });
         }
@@ -212,20 +209,19 @@ const App = () => {
             <strong>Select EEG Channels:</strong>
           </label>
           <div
-  style={{
-    marginLeft: "10px",
-    border: "1px solid #ccc",
-    padding: "10px",
-    cursor: "pointer",
-    backgroundColor: "#f9f9f9",
-  }}
-  onClick={() => setDropdownOpen(!dropdownOpen)}
->
-{selectedChannels.length > 0
-  ? `${selectedChannels.length} channel${selectedChannels.length > 1 ? 's' : ''} selected`
-  : "Select Channels"}{" "}
-  ▼
-</div>
+            style={{
+              marginLeft: "10px",
+              border: "1px solid #ccc",
+              padding: "10px",
+              cursor: "pointer",
+              backgroundColor: "#f9f9f9",
+            }}
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+          >
+            {selectedChannels.length > 0
+              ? `${selectedChannels.length} channel${selectedChannels.length > 1 ? 's' : ''} selected`
+              : "Select Channels"} ▼
+          </div>
 
           {dropdownOpen && (
             <div
@@ -289,8 +285,7 @@ const App = () => {
           >
             {referenceChannels.length > 0
               ? referenceChannels.join(", ")
-              : "Select Reference Channels"}{" "}
-            ▼
+              : "Select Reference Channels"} ▼
           </div>
 
           {referenceDropdownOpen && (
@@ -321,6 +316,19 @@ const App = () => {
               ))}
             </div>
           )}
+        </div>
+
+        {/* ✅ Spectral Analysis Toggle */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={showSpectralAnalysis}
+              onChange={() => setShowSpectralAnalysis(!showSpectralAnalysis)}
+              style={{ marginRight: "6px" }}
+            />
+            <strong>Show Spectral Analysis</strong>
+          </label>
         </div>
       </div>
 
@@ -379,6 +387,16 @@ const App = () => {
           ))
         )}
       </div>
+
+      {/* Spectral Analysis Component */}
+      {showSpectralAnalysis && (
+        <div style={{ marginTop: "20px", width: "100%" }}>
+          <SpectralAnalysis
+            eegData={eegData}
+            selectedChannels={selectedChannels}
+          />
+        </div>
+      )}
     </div>
   );
 };

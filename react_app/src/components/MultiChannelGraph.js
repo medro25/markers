@@ -184,7 +184,8 @@ const MultiChannelGraphUPlot = ({
 
   return (
     <>
-      {selectedChannels.length === channels.length && (
+   {channels.length > 0 && selectedChannels.length === channels.length && (
+
         <div
           style={{
             display: "flex",
