@@ -176,6 +176,9 @@ const MultiChannelGraphUPlot = ({
         drag: { x: false, y: false },
       },
       plugins: [annotationPlugin],
+      legend: {
+        show: false,
+      },
     };
 
     chartRef.current = { opts, data };
