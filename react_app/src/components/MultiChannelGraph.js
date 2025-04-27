@@ -55,8 +55,6 @@ const MultiChannelGraphUPlot = ({
           const xPos = u.valToPos(xValue, "x", true);
           const yPos = u.bbox.top + u.bbox.height - 10;
 
-          console.log(`[Trigger Marker] Raw: ${timestamp}, Adjusted: ${xValue}, xPos: ${xPos}`);
-
           if (xPos >= chartLeft && xPos <= chartRight) {
             ctx.save();
             ctx.beginPath();
@@ -70,8 +68,6 @@ const MultiChannelGraphUPlot = ({
 
             ctx.stroke();
             ctx.restore();
-          } else {
-            console.log(`[Trigger Marker] Skipped (out of bounds): ${timestamp} at xPos ${xPos}`);
           }
         });
       },
@@ -147,7 +143,7 @@ const MultiChannelGraphUPlot = ({
         x: { time: false },
         y: {
           auto: false,
-          range: () => [0, totalChannels * verticalSpacing + 20],
+          range: () => [0, totalChannels * verticalSpacing],
         },
       },
       series,
@@ -161,6 +157,19 @@ const MultiChannelGraphUPlot = ({
           show: true,
           stroke: "black",
           grid: { stroke: "black", width: 0.5 },
+          splits: (u, axisIdx, scaleMin, scaleMax, foundSpace, foundIncr) => {
+            const totalChannels = eegData.selected_channels.length;
+            const spacing = verticalSpacing;
+            let splits = [];
+            for (let i = 0; i < totalChannels; i++) {
+              splits.push(i * spacing);
+            }
+            return splits;
+          },
+          values: (u, splits, axisIdx, scaleMin, scaleMax) => {
+            const names = [...eegData.selected_channels].reverse(); // REVERSE order!
+            return names;
+          },
         },
       ],
       cursor: {
@@ -184,8 +193,7 @@ const MultiChannelGraphUPlot = ({
 
   return (
     <>
-   {channels.length > 0 && selectedChannels.length === channels.length && (
-
+      {channels.length > 0 && selectedChannels.length === channels.length && (
         <div
           style={{
             display: "flex",

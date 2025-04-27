@@ -125,7 +125,7 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
       {selectedChannel === eegData.selected_channels[0] && (
         <div style={{ display: "flex", gap: "1rem", marginBottom: "10px" }}>
           <label>
-            Height:{" "}
+            Scale size:{" "}
             <input
               type="text"
               value={globalSettings.height}
@@ -134,7 +134,7 @@ const EEGGraph = ({ eegData, selectedChannel, triggers, referenceChannels }) => 
             />
           </label>
           <label>
-            Margin Bottom:{" "}
+           Vertical spacing:{" "}
             <input
               type="text"
               value={globalSettings.marginBottom}
