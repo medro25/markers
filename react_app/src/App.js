@@ -138,6 +138,36 @@ const App = () => {
     );
   };
 
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [dragging, setDragging] = useState(false);
+  const [rel, setRel] = useState({ x: 0, y: 0 });
+
+  const handleMouseDown = (e) => {
+    // Only start dragging if background (not form elements like select, input, button)
+    if (["SELECT", "INPUT", "BUTTON", "LABEL"].includes(e.target.tagName)) {
+      return; // don't drag if clicking inside a form control
+    }
+    setDragging(true);
+    setRel({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragging) return;
+    setPosition({
+      x: e.clientX - rel.x,
+      y: e.clientY - rel.y,
+    });
+    e.preventDefault();
+  };
+
+  const handleMouseUp = () => {
+    setDragging(false);
+  };
+
   useEffect(() => {
     if (selectedDataStream) {
       sendStartDataStream(selectedDataStream, referenceChannels);
@@ -162,19 +192,28 @@ const App = () => {
 
   return (
     <div style={{ padding: "20px", maxWidth: "100vw" }}>
-      <h1>EEG Visualizer</h1>
+      <h1>EEG Visualizer</h1>     
 
       <div
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "20px",
-          alignItems: "flex-start",
-          marginBottom: "20px",
+          position: "absolute",
+          left: position.x,
+          top: position.y,
+          padding: "20px",
+          backgroundColor: "white",
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          width: "300px",
+          boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+          cursor: dragging ? "grabbing" : "grab",
         }}
       >
         {/* EEG Stream */}
-        <div>
+        <div style={{ marginBottom: "10px" }}>
           <label>
             <strong>EEG Data Stream:</strong>
           </label>
@@ -189,7 +228,7 @@ const App = () => {
         </div>
 
         {/* Marker Stream */}
-        <div>
+        <div style={{ marginBottom: "10px" }}>
           <label>
             <strong>Marker Stream:</strong>
           </label>
@@ -330,6 +369,7 @@ const App = () => {
             <strong>Show Spectral Analysis</strong>
           </label>
         </div>
+
       </div>
 
       {/* Trigger Display */}
